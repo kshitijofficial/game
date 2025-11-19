@@ -1,13 +1,20 @@
 import React, { useState, useEffect } from "react";
 import * as anchor from "@coral-xyz/anchor";
 import { Connection, PublicKey, SystemProgram } from "@solana/web3.js";
-// import idl from "./idl.json";
+import idl from "./idl.json";
 import "./App.css";
 
-
-
+const programID = new PublicKey("FqaoCAQj1VG9qHZT4euy9M83VL9pDZq3cBuTFnZxENVA");
+const idlWithAddress = {...idl,address:programID.toBase58()};
+const network = "https://api.devnet.solana.com";
+const connection  = new Connection(network,"processed");
 const getProvider = () => {
- 
+   const provider = new anchor.AnchorProvider(
+     connection,
+     window.solana,
+     anchor.AnchorProvider.defaultOptions()
+   );
+   return provider;
 };
 
 function App() {
@@ -28,8 +35,23 @@ function App() {
   // Fetch all games for the current user
   const fetchMyGames = async (walletAddr) => {
     try {
-      
-      setMyGames(null);
+      const provider = getProvider();
+      const program = new anchor.Program(idlWithAddress,provider);
+
+      const allBoardAccounts = await program.account.board.all();
+      const myGamesAccounts = allBoardAccounts.filter((account)=>{
+        const playerX = account.account.playerX;
+        return playerX && playerX.toString()==walletAddr;
+      })
+
+      const games = myGamesAccounts.map((account)=>({
+         gameId:account.account.gameId.toNumber(),
+         board:account.account,
+         pda:account.publicKey.toString()
+      }))
+
+      games.sort((a,b)=>a.gameId - b.gameId);
+      setMyGames(games);
     } catch (err) {
       console.error("Error fetching games:", err);
       setMyGames([]);
@@ -38,34 +60,69 @@ function App() {
 
   // Connect Wallet
   const connectWallet = async () => {
-    if (true) {
+    if (window.solana) {
       try {
         setLoading(true);
+        await window.solana.connect();
+        const address = window.solana.publicKey.toString();
+        setWalletAddress(address);
         setError(null);
+        await fetchMyGames(address);
       } catch (err) {
         console.error(err);
         setError("Failed to connect wallet");
       } finally {
         setLoading(false);
       }
+    }else{
+      setError("Please install Phantom Wallet")
     } 
   };
 
   // Initialize Game (Player X creates game)
   const initializeGame = async () => {
-    
-
+    if(!walletAddress){
+      setError("Please connect wallet first");
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
-    
+      const provider = getProvider();
+      const program = new anchor.Program(idlWithAddress,provider);
+      console.log("Program:",program);
+      const [userGamePda] = PublicKey.findProgramAddressSync(
+        [new TextEncoder().encode("user_games"),provider.wallet.publicKey.toBuffer()],
+        program.programId
+      );
+
+      let gameCount = 0;
+     
       try {
-      
-      } catch (err) {
+        const userGameAccount = await program.account.userGames.fetch(userGamePda);
+        gameCount = userGameAccount.gameCount.toNumber();
        
+      } catch (err) {
+        console.log("Error:",err);
+        gameCount=0;
       }
 
-    
+      const gameIdBytes = new Uint8Array(new anchor.BN(gameCount).toArray("le",8));
+     const [boardPda] = PublicKey.findProgramAddressSync(
+        [new TextEncoder().encode("board"),provider.wallet.publicKey.toBuffer(),gameIdBytes],
+        program.programId
+      );
+      console.log("BoardPDA addresss:",boardPda.toBase58())
+
+      const tx = await program.methods
+      .initialize()
+      .accounts({
+         payer:provider.wallet.publicKey,
+         userGames:userGamePda,
+         boardAccount:boardPda,
+         systemProgram:SystemProgram.programId
+      }).rpc();
+      await fetchMyGames(walletAddress);
     } catch (err) {
       console.error("Error initializing game:", err);
       setError("Failed to initialize game: " + err.message);
@@ -77,12 +134,48 @@ function App() {
   // Register as Player O
   const registerPlayerO = async () => {
    
+    if (!walletAddress){
+      setError("Please connnect wallet first");
+      return;
+    }
+
+    if (!joinAddress) {
+      setError("Please enter Player X's address");
+      return;
+    }
+
+    if (!joinAddress) {
+      setError("Please enter Player X's address");
+      return;
+    }
 
     try {
       setRegisterLoading(true);
       setError(null);
+      const provider = getProvider();
+      const program = new anchor.Program(idlWithAddress,provider);
+
+      const playerXPubKey = new PublicKey(joinAddress);
+      const gameId = parseInt(joinGameId);
+
+    const gameIdBytes = new Uint8Array(new anchor.BN(gameId).toArray("le",8));
+     const [boardPda] = PublicKey.findProgramAddressSync(
+        [new TextEncoder().encode("board"),playerXPubKey.toBuffer(),gameIdBytes],
+        program.programId
+      );
+
+      const tx = await program.methods
+      .playerORegister()
+      .accounts({
+         playerO:provider.wallet.publicKey,
+         boardAccount:boardPda,
+      }).rpc();
      
-     
+      console.log("Registered as Player O:", tx);
+      setPlayerXAddress(joinAddress);
+      setPlayerRole("O");
+      setSelectedGameId(gameId);
+      await fetchGameState(joinAddress,gameId);
     } catch (err) {
       console.error("Error registering as Player O:", err);
       setError("Failed to register as Player O: " + err.message);
@@ -93,11 +186,45 @@ function App() {
 
   // Join Game (Player O joins)
   const joinGame = async () => {
-  
+    if (!walletAddress) {
+      setError("Please connect wallet first");
+      return;
+    }
+
+    if (!joinAddress) {
+      setError("Please enter Player X's address");
+      return;
+    }
+
+    if (joinGameId === "") {
+      setError("Please enter Game ID");
+      return;
+    }
     try {
       setRejoinLoading(true);
       setError(null);
- 
+      const provider = getProvider();
+      const program = new anchor.Program(idlWithAddress, provider);
+      const playerXPubkey = new PublicKey(joinAddress);
+      const gameId = parseInt(joinGameId);
+
+      // Calculate board PDA with game ID
+      const gameIdBytes = new Uint8Array(new anchor.BN(gameId).toArray("le", 8));
+      const [boardPda] = PublicKey.findProgramAddressSync(
+        [new TextEncoder().encode("board"), playerXPubkey.toBuffer(), gameIdBytes],
+        program.programId
+      );
+
+      const tx = await program.methods
+        .playerOJoin()
+        .accounts({
+          playerO: provider.wallet.publicKey,
+          boardAccount: boardPda,
+        })
+        .rpc();
+
+      console.log("Joined game:", tx);
+      setPlayerXAddress(joinAddress);
       setPlayerRole("O");
       setSelectedGameId(gameId);
       await fetchGameState(joinAddress, gameId);
@@ -107,14 +234,23 @@ function App() {
     } finally {
       setRejoinLoading(false);
     }
+
   };
 
   // Fetch Game State
   const fetchGameState = async (playerXAddr, gameId) => {
-
+     if(!playerXAddr || gameId===null || gameId===undefined) return;
 
     try {
-    
+      const provider = getProvider();
+      const program = new anchor.Program(idlWithAddress,provider);
+      const gameIdBytes = new Uint8Array(new anchor.BN(gameId).toArray("le",8));
+      const playerXPubKey = new PublicKey(playerXAddr);
+     const [boardPda] = PublicKey.findProgramAddressSync(
+        [new TextEncoder().encode("board"),playerXPubKey.toBuffer(),gameIdBytes],
+        program.programId
+      );
+      const boardAccount = await program.account.board.fetch(boardPda);
       setGameState(boardAccount);
       setError(null);
     } catch (err) {
@@ -125,15 +261,55 @@ function App() {
 
   // Select and load a game
   const selectGame = async (game, role) => {
+    setPlayerXAddress(game.board.playerX.toString());
+    setSelectedGameId(game.gameId);
+    setPlayerRole(role);
+    setGameState(game.board);
   
   };
 
   // Make Move (using unified make_move instruction)
   const makeMove = async (position) => {
-  
+     if (!walletAddress || !playerXAddress || !gameState || selectedGameId === null) {
+      setError("Game not ready");
+      return;
+    }
+
+    if (!gameState.gameStatus) {
+      setError("Game is over");
+      return;
+    }
+
+    if (gameState.currentPlayer.toString() !== walletAddress) {
+      setError("Not your turn");
+      return;
+    }
+
+    if (gameState.board[position] !== 0) {
+      setError("Position already taken");
+      return;
+    }
+
     try {
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setError(null);
+    const provider = getProvider();
+    const program = new anchor.Program(idlWithAddress,provider);
+
+    const playerXPubKey = new PublicKey(playerXAddress);
+    const gameIdBytes = new Uint8Array(new anchor.BN(selectedGameId).toArray("le",8));
+     const [boardPda] = PublicKey.findProgramAddressSync(
+        [new TextEncoder().encode("board"),playerXPubKey.toBuffer(),gameIdBytes],
+        program.programId
+      );
+
+      const tx = await program.methods
+      .makeMove(position)
+      .accounts({
+         player:provider.wallet.publicKey,
+         boardAccount:boardPda,
+      }).rpc();
+      await fetchGameState(playerXAddress, selectedGameId);
    
     } catch (err) {
       console.error("Error making move:", err);
@@ -145,21 +321,99 @@ function App() {
 
   // Listen to program events
 
+  useEffect(()=>{
+    if(!walletAddress) return;
+      const provider = getProvider();
+      const program = new anchor.Program(idlWithAddress,provider);
+
+      const gameCreatedListener = program.addEventListener("GameCreated",(event)=>{
+         if (event.playerX.toString()===walletAddress){
+           fetchMyGames(walletAddress);
+         }
+      })
+
+      const moveMadeListener = program.addEventListener("MoveMade",(event)=>{
+          if (playerXAddress && selectedGameId !==null && event.gameId.toNumber()=== selectedGameId){
+              fetchGameState(playerXAddress,selectedGameId);
+          }  
+      })
+      const gameWonListener = program.addEventListener("GameWon",(event)=>{
+         if (selectedGameId !==null && event.gameId.toNumber()=== selectedGameId){
+              fetchGameState(playerXAddress,selectedGameId);
+          }
+      })
+      const gameDrawListener = program.addEventListener("GameDraw",(event)=>{
+         if (selectedGameId !==null && event.gameId.toNumber()=== selectedGameId){
+              fetchGameState(playerXAddress,selectedGameId);
+          }
+      })
+
+      return ()=>{
+        program.removeEventListener(gameCreatedListener);
+        program.removeEventListener(moveMadeListener);
+        program.removeEventListener(gameWonListener);
+       program.removeEventListener(gameDrawListener);
+      }
+
+  },[walletAddress,playerXAddress,selectedGameId]);
+
   // Auto-refresh game state (backup polling in case events are missed)
+  useEffect(()=>{
+     if(playerXAddress && gameState && gameState.gameStatus && selectedGameId!==null){
+       const interval = setInterval(()=>{
+         fetchGameState(playerXAddress,selectedGameId);
+       },5000);
+        return() => clearInterval(interval);
+     }
+  },[playerXAddress,gameState,selectedGameId]);
 
   // Render cell content
   const renderCell = (index) => {
-   
+    if(!gameState) return "";
+    const value = gameState.board[index];
+    if (value==1) return "X";
+    if (value==2) return "O";
+    return "";
   };
 
   // Check if it's current player's turn
   const isMyTurn = () => {
-  
+    if(!gameState || !walletAddress) return false;
+    return gameState.currentPlayer.toString() ===walletAddress;
   };
 
   // Get game status message
   const getGameStatus = () => {
+    if (!gameState) return "No game loaded";
+
+    const defaultPubkey = "11111111111111111111111111111111";
+    const playerOEmpty = gameState.playerO.toString() === defaultPubkey;
     
+    if(!gameState.gameStatus){
+      if(gameState.winnerAddress.toString() !==defaultPubkey){
+         const winnerRoler = gameState.winnerAddress.toString()===gameState.playerX.toString()?"X":"O";
+         const isWinner = gameState.winnerAddress.toString()===walletAddress;
+         return `Game Over! Player ${winnerRoler} wins ${isWinner?"🎉":""}`;
+      }
+
+      const isBoardFull = gameState.board.every(cell=>cell!=0);
+      if(isBoardFull){
+         return "Game Over! It is a draw!";
+      }
+       return "Game Not Started!";
+    }
+
+    if(playerOEmpty){
+      return "Waiting for Player O to join...";
+    }
+
+    const currentPlayerRole = gameState.currentPlayer.toString()=== gameState.playerX.toString()?"X":"O";
+
+    if (isMyTurn()){
+       return `Your turn! (You are Player ${playerRole})`;
+    }else{
+      return `Waiting for Player ${currentPlayerRole}...`;
+    }
   };
 
   return (

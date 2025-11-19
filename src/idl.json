@@ -1,0 +1,416 @@
+{
+  "address": "FqaoCAQj1VG9qHZT4euy9M83VL9pDZq3cBuTFnZxENVA",
+  "metadata": {
+    "name": "hello_anchor",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Created with Anchor"
+  },
+  "instructions": [
+    {
+      "name": "initialize",
+      "discriminator": [
+        175,
+        175,
+        109,
+        31,
+        13,
+        152,
+        155,
+        237
+      ],
+      "accounts": [
+        {
+          "name": "user_games",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  103,
+                  97,
+                  109,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "payer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "board_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "payer"
+              },
+              {
+                "kind": "account",
+                "path": "user_games.game_count",
+                "account": "UserGames"
+              }
+            ]
+          }
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "make_move",
+      "discriminator": [
+        78,
+        77,
+        152,
+        203,
+        222,
+        211,
+        208,
+        233
+      ],
+      "accounts": [
+        {
+          "name": "player",
+          "signer": true
+        },
+        {
+          "name": "board_account",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "position",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "player_o_join",
+      "discriminator": [
+        180,
+        188,
+        100,
+        23,
+        184,
+        209,
+        122,
+        197
+      ],
+      "accounts": [
+        {
+          "name": "player_o",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "board_account",
+          "writable": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "player_o_register",
+      "discriminator": [
+        5,
+        55,
+        229,
+        58,
+        133,
+        88,
+        61,
+        243
+      ],
+      "accounts": [
+        {
+          "name": "player_o",
+          "signer": true
+        },
+        {
+          "name": "board_account",
+          "writable": true
+        }
+      ],
+      "args": []
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Board",
+      "discriminator": [
+        79,
+        48,
+        160,
+        63,
+        153,
+        132,
+        240,
+        56
+      ]
+    },
+    {
+      "name": "UserGames",
+      "discriminator": [
+        192,
+        71,
+        54,
+        150,
+        30,
+        140,
+        213,
+        233
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "GameCreated",
+      "discriminator": [
+        218,
+        25,
+        150,
+        94,
+        177,
+        112,
+        96,
+        2
+      ]
+    },
+    {
+      "name": "GameDraw",
+      "discriminator": [
+        247,
+        40,
+        232,
+        252,
+        13,
+        235,
+        125,
+        9
+      ]
+    },
+    {
+      "name": "GameWon",
+      "discriminator": [
+        160,
+        198,
+        234,
+        193,
+        227,
+        128,
+        102,
+        199
+      ]
+    },
+    {
+      "name": "MoveMade",
+      "discriminator": [
+        63,
+        69,
+        224,
+        215,
+        118,
+        250,
+        136,
+        241
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "PlayerAlreadyRegistered",
+      "msg": "Player is already registered"
+    },
+    {
+      "code": 6001,
+      "name": "UserAlreadyInitialized",
+      "msg": "User is already initialized"
+    },
+    {
+      "code": 6002,
+      "name": "LocationNotEmpty",
+      "msg": "Location is not empty"
+    },
+    {
+      "code": 6003,
+      "name": "NotYourChance",
+      "msg": "This is not your chance"
+    },
+    {
+      "code": 6004,
+      "name": "PlayerNotRegistered",
+      "msg": "Player is not registered yet"
+    },
+    {
+      "code": 6005,
+      "name": "InvalidPosition",
+      "msg": "The position is invalid"
+    },
+    {
+      "code": 6006,
+      "name": "GameOver",
+      "msg": "The game is over"
+    },
+    {
+      "code": 6007,
+      "name": "Unauthorised",
+      "msg": "The user is unauthorised"
+    },
+    {
+      "code": 6008,
+      "name": "PlayerONotRegistered",
+      "msg": "Player O has not joined"
+    }
+  ],
+  "types": [
+    {
+      "name": "Board",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "winner_address",
+            "type": "pubkey"
+          },
+          {
+            "name": "player_x",
+            "type": "pubkey"
+          },
+          {
+            "name": "player_o",
+            "type": "pubkey"
+          },
+          {
+            "name": "current_player",
+            "type": "pubkey"
+          },
+          {
+            "name": "board",
+            "type": {
+              "array": [
+                "u8",
+                9
+              ]
+            }
+          },
+          {
+            "name": "game_status",
+            "type": "bool"
+          },
+          {
+            "name": "game_id",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GameCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "game_id",
+            "type": "u64"
+          },
+          {
+            "name": "player_x",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GameDraw",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "game_id",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GameWon",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "winner",
+            "type": "pubkey"
+          },
+          {
+            "name": "game_id",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MoveMade",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "player",
+            "type": "pubkey"
+          },
+          {
+            "name": "position",
+            "type": "u8"
+          },
+          {
+            "name": "game_id",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UserGames",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "game_count",
+            "type": "u64"
+          }
+        ]
+      }
+    }
+  ]
+}
